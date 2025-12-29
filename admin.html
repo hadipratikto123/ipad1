@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        .blink-bg { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { background-color: #ef4444; color: white; } }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+
+    <audio id="siren-sound" loop src="https://actions.google.com/sounds/v1/alarms/siren_whistle.ogg"></audio>
+
+    <div class="flex h-screen overflow-hidden">
+        
+        <div class="w-64 bg-gray-900 text-white p-6 flex flex-col">
+            <h1 class="text-2xl font-bold mb-8 tracking-wider">🏭 CONTROL</h1>
+            <div class="text-xs text-gray-500 mb-2">DEVICE MONITOR</div>
+            <div id="connection-status" class="flex items-center gap-2 mb-8 text-green-400">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> Online
+            </div>
+            
+            <button onclick="enableAudio()" id="btn-audio" class="w-full bg-gray-700 p-3 rounded text-sm hover:bg-gray-600 mb-4 text-left">
+                🔊 Aktifkan Suara Alarm
+            </button>
+            <button onclick="downloadPDF()" class="w-full bg-blue-600 p-3 rounded text-sm hover:bg-blue-500 text-left font-bold flex items-center gap-2">
+                📄 Download Laporan PDF
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-10">
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+                <div id="live-card" class="bg-white rounded-2xl shadow-xl p-6 border-l-8 border-gray-400">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800">iPad Produksi 01</h2>
+                            <p class="text-gray-500 text-sm">Realtime Monitoring</p>
+                        </div>
+                        <span id="status-badge" class="px-4 py-2 rounded-lg font-bold text-white bg-gray-400">LOADING</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="bg-gray-50 p-4 rounded-xl">
+                            <span class="text-xs text-gray-500 uppercase">Peminjam</span>
+                            <div id="peminjam" class="text-xl font-bold text-blue-600 mt-1">-</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-xl">
+                            <span class="text-xs text-gray-500 uppercase">Waktu Pinjam</span>
+                            <div id="waktu" class="text-lg font-medium text-gray-800 mt-1">-</div>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="remoteAction('LOCKED')" class="flex-1 bg-gray-800 text-white py-3 rounded-lg hover:bg-black font-bold text-sm">🔒 LOCK</button>
+                        <button onclick="remoteAction('AVAILABLE')" class="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-bold text-sm">🔓 UNLOCK</button>
+                        <button onclick="remoteAction('LATE')" class="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 font-bold text-sm animate-pulse">⚠️ ALARM</button>
+                    </div>
+                </div>
+
+                <div class="bg-blue-900 rounded-2xl shadow-xl p-6 text-white flex flex-col justify-center">
+                    <h3 class="text-xl font-bold mb-2">Statistik Hari Ini</h3>
+                    <p class="opacity-80 mb-6">Total peminjaman yang tercatat dalam log.</p>
+                    <div class="text-5xl font-bold" id="total-logs">0</div>
+                    <div class="text-sm opacity-60 mt-2">Aktivitas Peminjaman</div>
+                </div>
+            </div>
+
+            <h3 class="text-xl font-bold text-gray-800 mb-4">📜 Riwayat Peminjaman (History)</h3>
+            <div class="bg-white rounded-xl shadow overflow-hidden">
+                <table class="w-full text-left" id="history-table">
+                    <thead class="bg-gray-100 text-gray-600 text-sm uppercase">
+                        <tr>
+                            <th class="p-4">Waktu Kembali</th>
+                            <th class="p-4">Nama Peminjam</th>
+                            <th class="p-4">Unit</th>
+                            <th class="p-4">Waktu Pinjam</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="text-gray-700">
+                        </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, updateDoc, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBg-8uaR5gpOSxlTrFqmn6VudotLJ7qiRY",
+            authDomain: "ipad-pinjam.firebaseapp.com",
+            projectId: "ipad-pinjam",
+            storageBucket: "ipad-pinjam.firebasestorage.app",
+            messagingSenderId: "746469587428",
+            appId: "1:746469587428:web:a9e5ae742d222b62106ff1",
+            measurementId: "G-VQ6EEPZ7B8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const deviceID = "ipad_prod_01"; 
+
+        // 1. LOGIKA LIVE MONITORING & ALARM
+        const siren = document.getElementById('siren-sound');
+        const liveCard = document.getElementById('live-card');
+
+        onSnapshot(doc(db, "devices", deviceID), (docSnap) => {
+            const data = docSnap.data();
+            if(!data) return;
+
+            // Update Teks
+            document.getElementById('peminjam').innerText = data.current_user || "-";
+            document.getElementById('waktu').innerText = data.borrow_time || "-";
+
+            // Update Warna & Alarm
+            const badge = document.getElementById('status-badge');
+            badge.innerText = data.status;
+
+            // Reset Tampilan
+            liveCard.classList.remove('blink-bg');
+            siren.pause();
+
+            if(data.status === 'BORROWED') {
+                badge.className = "px-4 py-2 rounded-lg font-bold text-white bg-orange-500";
+                liveCard.className = "bg-white rounded-2xl shadow-xl p-6 border-l-8 border-orange-500";
+            } 
+            else if(data.status === 'AVAILABLE') {
+                badge.className = "px-4 py-2 rounded-lg font-bold text-white bg-green-500";
+                liveCard.className = "bg-white rounded-2xl shadow-xl p-6 border-l-8 border-green-500";
+            } 
+            else if(data.status === 'LATE') {
+                // MODUS ALARM: Bunyi Sirine & Layar Kedip
+                badge.className = "px-4 py-2 rounded-lg font-bold text-white bg-red-600";
+                liveCard.classList.add('blink-bg'); // Efek kedip
+                siren.play().catch(e => console.log("Klik tombol audio dulu!"));
+            }
+        });
+
+        // 2. LOGIKA RIWAYAT (HISTORY)
+        const logsRef = collection(db, "logs");
+        const q = query(logsRef, orderBy("timestamp", "desc"), limit(20));
+
+        onSnapshot(q, (snapshot) => {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = ""; // Bersihkan tabel lama
+            document.getElementById('total-logs').innerText = snapshot.size;
+
+            let pdfData = []; // Simpan data untuk PDF
+
+            snapshot.forEach(doc => {
+                const log = doc.data();
+                const row = `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="p-4 font-bold text-emerald-600">${log.return_time}</td>
+                        <td class="p-4 font-bold">${log.user}</td>
+                        <td class="p-4 text-gray-500">${log.device}</td>
+                        <td class="p-4 text-gray-400 text-sm">${log.borrow_time}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+                
+                // Masukkan ke array PDF
+                window.pdfDataArray.push([log.return_time, log.user, log.device, log.borrow_time]);
+            });
+        });
+
+        // 3. FUNGSI PENDUKUNG
+        window.remoteAction = async (act) => {
+            await updateDoc(doc(db, "devices", deviceID), { status: act });
+        }
+
+        window.enableAudio = () => {
+            siren.play(); 
+            setTimeout(() => siren.pause(), 100);
+            document.getElementById('btn-audio').innerText = "🔊 Audio Aktif (Siap Bunyi)";
+            alert("Audio diaktifkan! Jika iPad telat, PC ini akan bunyi.");
+        }
+
+        // Variabel global untuk simpan data table
+        window.pdfDataArray = [];
+        
+        window.downloadPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.text("Laporan Peminjaman iPad Produksi", 14, 20);
+            doc.text("Tanggal Cetak: " + new Date().toLocaleString(), 14, 30);
+
+            doc.autoTable({
+                startY: 40,
+                head: [['Waktu Kembali', 'Peminjam', 'Unit', 'Waktu Pinjam']],
+                body: window.pdfDataArray,
+            });
+
+            doc.save("Laporan-Produksi.pdf");
+        }
+    </script>
+</body>
+</html>

@@ -2,96 +2,54 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Admin Dashboard Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iPad Production Log</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        .blink-bg { animation: blinker 1s linear infinite; }
-        @keyframes blinker { 50% { background-color: #ef4444; color: white; } }
+        body { font-family: 'Inter', sans-serif; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+        .minimized { transform: translateY(-110%); opacity: 0; pointer-events: none; }
+        #lock-screen { transition: all 0.6s cubic-bezier(0.87, 0, 0.13, 1); top: 0; }
+        @keyframes pulse-red { 0% { background-color: #ef4444; } 50% { background-color: #991b1b; } 100% { background-color: #ef4444; } }
+        .alarm-mode { animation: pulse-red 1s infinite; z-index: 60; }
     </style>
 </head>
-<body class="bg-gray-100 font-sans min-h-screen">
+<body class="bg-slate-900 text-white h-screen w-screen overflow-hidden relative">
 
-    <audio id="siren-sound" loop src="https://actions.google.com/sounds/v1/alarms/siren_whistle.ogg"></audio>
-
-    <div class="flex h-screen overflow-hidden">
-        
-        <div class="w-64 bg-gray-900 text-white p-6 flex flex-col">
-            <h1 class="text-2xl font-bold mb-8 tracking-wider">🏭 CONTROL</h1>
-            <div class="text-xs text-gray-500 mb-2">DEVICE MONITOR</div>
-            <div id="connection-status" class="flex items-center gap-2 mb-8 text-green-400">
-                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> Online
-            </div>
-            
-            <button onclick="enableAudio()" id="btn-audio" class="w-full bg-gray-700 p-3 rounded text-sm hover:bg-gray-600 mb-4 text-left">
-                🔊 Aktifkan Suara Alarm
-            </button>
-            <button onclick="downloadPDF()" class="w-full bg-blue-600 p-3 rounded text-sm hover:bg-blue-500 text-left font-bold flex items-center gap-2">
-                📄 Download Laporan PDF
-            </button>
+    <div id="main-app" class="h-full w-full flex flex-col items-center justify-center p-6 relative z-0">
+        <div class="absolute top-0 left-0 w-full p-6 flex justify-between items-center bg-slate-800/80 border-b border-slate-700">
+            <div><span class="text-slate-400 text-sm">DEVICE ID</span><br><b class="text-white text-xl">IPAD-PROD-01</b></div>
+            <div class="text-right"><span class="text-slate-400 text-sm">OPERATOR</span><br><span id="user-display" class="text-green-400 font-bold text-xl">...</span></div>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-10">
-            
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-                <div id="live-card" class="bg-white rounded-2xl shadow-xl p-6 border-l-8 border-gray-400">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <h2 class="text-2xl font-bold text-gray-800">iPad Produksi 01</h2>
-                            <p class="text-gray-500 text-sm">Realtime Monitoring</p>
-                        </div>
-                        <span id="status-badge" class="px-4 py-2 rounded-lg font-bold text-white bg-gray-400">LOADING</span>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4 mb-6">
-                        <div class="bg-gray-50 p-4 rounded-xl">
-                            <span class="text-xs text-gray-500 uppercase">Peminjam</span>
-                            <div id="peminjam" class="text-xl font-bold text-blue-600 mt-1">-</div>
-                        </div>
-                        <div class="bg-gray-50 p-4 rounded-xl">
-                            <span class="text-xs text-gray-500 uppercase">Waktu Pinjam</span>
-                            <div id="waktu" class="text-lg font-medium text-gray-800 mt-1">-</div>
-                        </div>
-                    </div>
-
-                    <div class="flex gap-2">
-                        <button onclick="remoteAction('LOCKED')" class="flex-1 bg-gray-800 text-white py-3 rounded-lg hover:bg-black font-bold text-sm">🔒 LOCK</button>
-                        <button onclick="remoteAction('AVAILABLE')" class="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-bold text-sm">🔓 UNLOCK</button>
-                        <button onclick="remoteAction('LATE')" class="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 font-bold text-sm animate-pulse">⚠️ ALARM</button>
-                    </div>
-                </div>
-
-                <div class="bg-blue-900 rounded-2xl shadow-xl p-6 text-white flex flex-col justify-center">
-                    <h3 class="text-xl font-bold mb-2">Statistik Hari Ini</h3>
-                    <p class="opacity-80 mb-6">Total peminjaman yang tercatat dalam log.</p>
-                    <div class="text-5xl font-bold" id="total-logs">0</div>
-                    <div class="text-sm opacity-60 mt-2">Aktivitas Peminjaman</div>
-                </div>
-            </div>
-
-            <h3 class="text-xl font-bold text-gray-800 mb-4">📜 Riwayat Peminjaman (History)</h3>
-            <div class="bg-white rounded-xl shadow overflow-hidden">
-                <table class="w-full text-left" id="history-table">
-                    <thead class="bg-gray-100 text-gray-600 text-sm uppercase">
-                        <tr>
-                            <th class="p-4">Waktu Kembali</th>
-                            <th class="p-4">Nama Peminjam</th>
-                            <th class="p-4">Unit</th>
-                            <th class="p-4">Waktu Pinjam</th>
-                        </tr>
-                    </thead>
-                    <tbody id="table-body" class="text-gray-700">
-                        </tbody>
-                </table>
-            </div>
-
+        <div class="w-full max-w-lg space-y-6 text-center mt-10">
+            <h1 class="text-5xl font-bold mb-10 text-slate-200" id="status-text">AVAILABLE</h1>
+            <button id="btn-borrow" onclick="borrowUnit()" class="hidden w-full py-10 rounded-3xl bg-blue-600 shadow-2xl shadow-blue-900/50 group">
+                <div class="text-4xl mb-2">📦</div><div class="text-2xl font-bold text-white">AMBIL UNIT</div>
+            </button>
+            <button id="btn-return" onclick="returnUnit()" class="hidden w-full py-10 rounded-3xl bg-emerald-600 shadow-2xl shadow-emerald-900/50 group">
+                <div class="text-4xl mb-2">✅</div><div class="text-2xl font-bold text-white">KEMBALIKAN</div>
+            </button>
         </div>
+    </div>
+
+    <div id="lock-screen" class="absolute h-full w-full bg-black z-50 flex flex-col items-center justify-center p-8">
+        <div class="w-full max-w-sm text-center">
+            <div class="text-7xl mb-6">🔒</div>
+            <h2 class="text-3xl font-bold text-white mb-2">Sistem Terkunci</h2>
+            <input type="text" id="inputName" placeholder="Nama / NIK..." class="w-full bg-slate-800 border-2 border-slate-700 rounded-xl px-6 py-5 text-xl text-center text-white mb-4" autocomplete="off">
+            <button onclick="unlockSystem()" class="w-full bg-white text-black font-extrabold text-xl py-5 rounded-xl active:scale-95 transition">BUKA AKSES</button>
+        </div>
+    </div>
+
+    <div id="alarm-screen" class="hidden absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center text-center p-4 alarm-mode">
+        <h1 class="text-6xl font-black text-white mb-4">⚠️ DIBLOKIR</h1>
+        <p class="text-2xl text-white">Hubungi Supervisor.</p>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, updateDoc, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, updateDoc, collection, addDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBg-8uaR5gpOSxlTrFqmn6VudotLJ7qiRY",
@@ -105,101 +63,79 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const deviceID = "ipad_prod_01"; 
+        const deviceRef = doc(db, "devices", "ipad_prod_01");
+        const logsRef = collection(db, "logs"); // Koleksi baru untuk riwayat
 
-        // 1. LOGIKA LIVE MONITORING & ALARM
-        const siren = document.getElementById('siren-sound');
-        const liveCard = document.getElementById('live-card');
+        let currentUser = "";
 
-        onSnapshot(doc(db, "devices", deviceID), (docSnap) => {
+        // Listen Realtime
+        onSnapshot(deviceRef, (docSnap) => {
             const data = docSnap.data();
             if(!data) return;
+            const st = data.status;
+            
+            document.getElementById('status-text').innerText = st;
+            document.getElementById('alarm-screen').classList.add('hidden');
 
-            // Update Teks
-            document.getElementById('peminjam').innerText = data.current_user || "-";
-            document.getElementById('waktu').innerText = data.borrow_time || "-";
-
-            // Update Warna & Alarm
-            const badge = document.getElementById('status-badge');
-            badge.innerText = data.status;
-
-            // Reset Tampilan
-            liveCard.classList.remove('blink-bg');
-            siren.pause();
-
-            if(data.status === 'BORROWED') {
-                badge.className = "px-4 py-2 rounded-lg font-bold text-white bg-orange-500";
-                liveCard.className = "bg-white rounded-2xl shadow-xl p-6 border-l-8 border-orange-500";
-            } 
-            else if(data.status === 'AVAILABLE') {
-                badge.className = "px-4 py-2 rounded-lg font-bold text-white bg-green-500";
-                liveCard.className = "bg-white rounded-2xl shadow-xl p-6 border-l-8 border-green-500";
-            } 
-            else if(data.status === 'LATE') {
-                // MODUS ALARM: Bunyi Sirine & Layar Kedip
-                badge.className = "px-4 py-2 rounded-lg font-bold text-white bg-red-600";
-                liveCard.classList.add('blink-bg'); // Efek kedip
-                siren.play().catch(e => console.log("Klik tombol audio dulu!"));
+            if (st === 'LOCKED') {
+                document.getElementById('lock-screen').classList.remove('minimized');
+                document.getElementById('inputName').value = "";
+            } else if (st === 'LATE') {
+                document.getElementById('alarm-screen').classList.remove('hidden');
+            } else if (st === 'AVAILABLE') {
+                document.getElementById('btn-borrow').classList.remove('hidden');
+                document.getElementById('btn-return').classList.add('hidden');
+                document.getElementById('status-text').className = "text-5xl font-bold mb-10 text-green-400";
+            } else if (st === 'BORROWED') {
+                document.getElementById('btn-borrow').classList.add('hidden');
+                document.getElementById('btn-return').classList.remove('hidden');
+                document.getElementById('status-text').className = "text-5xl font-bold mb-10 text-orange-400";
             }
         });
 
-        // 2. LOGIKA RIWAYAT (HISTORY)
-        const logsRef = collection(db, "logs");
-        const q = query(logsRef, orderBy("timestamp", "desc"), limit(20));
-
-        onSnapshot(q, (snapshot) => {
-            const tbody = document.getElementById('table-body');
-            tbody.innerHTML = ""; // Bersihkan tabel lama
-            document.getElementById('total-logs').innerText = snapshot.size;
-
-            let pdfData = []; // Simpan data untuk PDF
-
-            snapshot.forEach(doc => {
-                const log = doc.data();
-                const row = `
-                    <tr class="border-b hover:bg-gray-50">
-                        <td class="p-4 font-bold text-emerald-600">${log.return_time}</td>
-                        <td class="p-4 font-bold">${log.user}</td>
-                        <td class="p-4 text-gray-500">${log.device}</td>
-                        <td class="p-4 text-gray-400 text-sm">${log.borrow_time}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-                
-                // Masukkan ke array PDF
-                window.pdfDataArray.push([log.return_time, log.user, log.device, log.borrow_time]);
-            });
-        });
-
-        // 3. FUNGSI PENDUKUNG
-        window.remoteAction = async (act) => {
-            await updateDoc(doc(db, "devices", deviceID), { status: act });
+        window.unlockSystem = () => {
+            const name = document.getElementById('inputName').value;
+            if(!name) return alert("Isi nama dulu!");
+            currentUser = name;
+            document.getElementById('user-display').innerText = name.toUpperCase();
+            document.getElementById('lock-screen').classList.add('minimized');
         }
 
-        window.enableAudio = () => {
-            siren.play(); 
-            setTimeout(() => siren.pause(), 100);
-            document.getElementById('btn-audio').innerText = "🔊 Audio Aktif (Siap Bunyi)";
-            alert("Audio diaktifkan! Jika iPad telat, PC ini akan bunyi.");
+        window.borrowUnit = async () => {
+            if(!currentUser) return alert("Sesi habis.");
+            await updateDoc(deviceRef, {
+                status: "BORROWED",
+                current_user: currentUser,
+                borrow_time: new Date().toLocaleString(),
+                borrow_timestamp: Date.now() // Untuk hitungan durasi
+            });
         }
 
-        // Variabel global untuk simpan data table
-        window.pdfDataArray = [];
-        
-        window.downloadPDF = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-
-            doc.text("Laporan Peminjaman iPad Produksi", 14, 20);
-            doc.text("Tanggal Cetak: " + new Date().toLocaleString(), 14, 30);
-
-            doc.autoTable({
-                startY: 40,
-                head: [['Waktu Kembali', 'Peminjam', 'Unit', 'Waktu Pinjam']],
-                body: window.pdfDataArray,
+        window.returnUnit = async () => {
+            if(!confirm("Kembalikan unit?")) return;
+            
+            // 1. Ambil data terakhir untuk disimpan ke LOG
+            const snap = await getDoc(deviceRef);
+            const data = snap.data();
+            
+            // 2. Simpan ke History Log
+            await addDoc(logsRef, {
+                user: data.current_user,
+                borrow_time: data.borrow_time,
+                return_time: new Date().toLocaleString(),
+                device: "iPad 01",
+                timestamp: Date.now()
             });
 
-            doc.save("Laporan-Produksi.pdf");
+            // 3. Reset Status iPad
+            await updateDoc(deviceRef, {
+                status: "AVAILABLE",
+                current_user: "",
+                return_time: new Date().toLocaleString()
+            });
+
+            document.getElementById('lock-screen').classList.remove('minimized');
+            document.getElementById('inputName').value = "";
         }
     </script>
 </body>
